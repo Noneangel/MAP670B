@@ -25,13 +25,14 @@ def Predict(name_text,dictionary,model):
 		if(w in dictionary):
 			vector_dict[dictionary[w]]=1
 	return (name_text[0], model.predict(SparseVector(len(dictionary),vector_dict)))
-data,Y=lf.loadLabeled("./data/train")
-print len(data)
-dataRDD=sc.parallelize(data,numSlices=16)
+data_train,train_Y=lf.loadLabeled("./data/train")
+#TODO : corssvalidation
+print len(data_train)
+data_trainRDD=sc.parallelize(data_train,numSlices=16)
 #map data to a binary matrix
 #1. get the dictionary of the data
 #The dictionary of each document is a list of UNIQUE(set) words 
-lists=dataRDD.map(lambda x:list(set(x.strip().split(' ')))).collect()
+lists=data_trainRDD.map(lambda x:list(set(x.strip().split(' ')))).collect()
 all=[]
 #combine all dictionaries together (fastest solution for Python)
 for l in lists:
@@ -45,8 +46,8 @@ for i,word in enumerate(dict):
 #we need the dictionary to be available AS A WHOLE throughout the cluster
 dict_broad=sc.broadcast(dictionary)
 #build labelled Points from data
-data_class=zip(data,Y)#if a=[1,2,3] & b=['a','b','c'] then zip(a,b)=[(1,'a'),(2, 'b'), (3, 'c')]
-dcRDD=sc.parallelize(data_class,numSlices=16)
+data_train_class=zip(data_train,train_Y)#if a=[1,2,3] & b=['a','b','c'] then zip(a,b)=[(1,'a'),(2, 'b'), (3, 'c')]
+dcRDD=sc.parallelize(data_train_class,numSlices=16)
 #get the labelled points
 labeledRDD=dcRDD.map(partial(createBinaryLabeledPoint,dictionary=dict_broad.value))
 #Train NaiveBayes
