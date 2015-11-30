@@ -1,0 +1,7 @@
+to clone do the following :
+git clone https://github.com/Noneangel/MAP670B.git
+
+then to uncompresse the data
+cd MAP670B/data
+7za x data.7z
+
