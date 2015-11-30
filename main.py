@@ -8,6 +8,8 @@ from pyspark.mllib.linalg import SparseVector
 from pyspark.mllib.regression import LabeledPoint
 sc = SparkContext(appName="Simple App")
 
+from sklearn.cross_validation import KFold
+
 
 def createBinaryLabeledPoint(doc_class,dictionary):
 	words=doc_class[0].strip().split(' ')
@@ -25,35 +27,51 @@ def Predict(name_text,dictionary,model):
 		if(w in dictionary):
 			vector_dict[dictionary[w]]=1
 	return (name_text[0], model.predict(SparseVector(len(dictionary),vector_dict)))
-data_train,train_Y=lf.loadLabeled("./data/train")
+data,Y=lf.loadLabeled("./data/train")
+
 #TODO : corssvalidation
-print len(data_train)
-data_trainRDD=sc.parallelize(data_train,numSlices=16)
-#map data to a binary matrix
-#1. get the dictionary of the data
-#The dictionary of each document is a list of UNIQUE(set) words 
-lists=data_trainRDD.map(lambda x:list(set(x.strip().split(' ')))).collect()
-all=[]
-#combine all dictionaries together (fastest solution for Python)
-for l in lists:
-	all.extend(l)
-dict=set(all)
-print len(dict)
-#it is faster to know the position of the word if we put it as values in a dictionary
-dictionary={}
-for i,word in enumerate(dict):
-	dictionary[word]=i
-#we need the dictionary to be available AS A WHOLE throughout the cluster
-dict_broad=sc.broadcast(dictionary)
-#build labelled Points from data
-data_train_class=zip(data_train,train_Y)#if a=[1,2,3] & b=['a','b','c'] then zip(a,b)=[(1,'a'),(2, 'b'), (3, 'c')]
-dcRDD=sc.parallelize(data_train_class,numSlices=16)
-#get the labelled points
-labeledRDD=dcRDD.map(partial(createBinaryLabeledPoint,dictionary=dict_broad.value))
-#Train NaiveBayes
-model=NaiveBayes.train(labeledRDD)
-#broadcast the model
-mb=sc.broadcast(model)
+n_folds = 5
+kf = KFold(len(data), n_folds=n_folds)
+for i, (train_index_array, test_index_array) in enumerate(kf):
+	print("cross validation ({} out of {})".format(i+1, n_folds))
+	data_train, Y_train = [], []
+	data_test, Y_test = [], []
+	for train_index in train_index_array:
+		data_train.append(data[train_index])
+		Y_train.append(Y[train_index])
+	for test_index in test_index_array:
+		data_test.append(data[test_index])
+		Y_test.append(Y[test_index])
+
+	print "\t", len(data_train)
+	data_trainRDD=sc.parallelize(data_train,numSlices=16)
+	#map data to a binary matrix
+	#1. get the dictionary of the data
+	#The dictionary of each document is a list of UNIQUE(set) words 
+	lists=data_trainRDD.map(lambda x:list(set(x.strip().split(' ')))).collect()
+	all=[]
+	#combine all dictionaries together (fastest solution for Python)
+	for l in lists:
+		all.extend(l)
+	dict=set(all)
+	print "\t", len(dict)
+	#it is faster to know the position of the word if we put it as values in a dictionary
+	dictionary={}
+	for i,word in enumerate(dict):
+		dictionary[word]=i
+	#we need the dictionary to be available AS A WHOLE throughout the cluster
+	dict_broad=sc.broadcast(dictionary)
+	#build labelled Points from data
+	data_train_class=zip(data_train,Y_train)#if a=[1,2,3] & b=['a','b','c'] then zip(a,b)=[(1,'a'),(2, 'b'), (3, 'c')]
+	dcRDD=sc.parallelize(data_train_class,numSlices=16)
+	#get the labelled points
+	labeledRDD=dcRDD.map(partial(createBinaryLabeledPoint,dictionary=dict_broad.value))
+	#Train NaiveBayes
+	model=NaiveBayes.train(labeledRDD)
+	#broadcast the model
+	mb=sc.broadcast(model)
+
+	#TODO : testing of crossvalidation
 
 test,names=lf.loadUknown('./data/test')
 name_text=zip(names,test)
